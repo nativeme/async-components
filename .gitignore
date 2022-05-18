@@ -1,0 +1,13 @@
+# Platformio def
+pio
+.pio
+# all vsc
+vscode
+.vscode
+# all main.cpp files
+main.cpp
+# Powershell scripts
+*.ps1
+# other untracked
+notes.cpp
+notes.txt
