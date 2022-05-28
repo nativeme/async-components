@@ -1,17 +1,20 @@
 #ifndef _NAMED_HPP_
 #define _NAMED_HPP_
-#include "Arduino.h"
+#include <WString.h>
+#include <vector>
 
-namespace async{
 class Named
 {
 private:
     String name;
 public:
-    Named();
-    virtual ~Named();
+    Named(const String& name = "")
+    :   name(name)
+    {};
+    virtual ~Named(){
+    };
 
-    String& get_name() {
+    const String& get_name() const {
         return name;
     }
 
@@ -19,5 +22,5 @@ public:
         this->name = name;
     }
 };
-}
+
 #endif

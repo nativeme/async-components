@@ -4,8 +4,8 @@ namespace async{
 VPWMPin::VPWMPin(std::function<void(uint8_t)>&&  digital_write, 
                  std::function<bool(void)>&&     digital_read,
                  std::function<void(uint8_t)>&&  pin_mode)
-:   VPin(std::move(digital_write), 
-         std::move(digital_read), 
+:   VPin(std::move(digital_read), 
+         std::move(digital_write), 
          std::move(pin_mode))
 {
     pwm_width_timer.set_resolution(async::Timer::Resolution::micros_res);
@@ -15,9 +15,9 @@ VPWMPin::VPWMPin(std::function<void(uint8_t)>&&  digital_write,
 
 VPWMPin::VPWMPin(const VPin& vpin){
     auto casted_vpin = (const VPWMPin*)&vpin;
-    this->digital_write = casted_vpin->digital_write;
-    this->digital_read  = casted_vpin->digital_read;
-    this->pin_mode      = casted_vpin->pin_mode;
+    this->digital_read_impl  = casted_vpin->digital_read_impl;
+    this->digital_write_impl = casted_vpin->digital_write_impl;
+    this->pin_mode_impl      = casted_vpin->pin_mode_impl;
     pwm_width_timer.set_resolution(async::Timer::Resolution::micros_res);
     pwm_period_timer.set_resolution(async::Timer::Resolution::micros_res);
     async::Runtime::loopables.push_back(this);
@@ -42,12 +42,12 @@ void VPWMPin::set_duty_cycle(const float &duty_cycle){
 };
 
 void VPWMPin::on(){
-    this->digital_write(high);
+    this->digital_write_impl(high);
     state = VPWMPin::State::on_state;
 };
 
 void VPWMPin::off(){
-    this->digital_write(low);
+    this->digital_write_impl(low);
     state = VPWMPin::State::off_state;
 };
 
@@ -61,11 +61,11 @@ void VPWMPin::loop(){
         break;
     case VPWMPin::State::on_state:
         if(pwm_period_timer.is_finished()){
-            this->digitalWrite(high);
+            this->digital_write(high);
             pwm_width_timer.start();
         }    
         if(pwm_width_timer.is_finished()){
-            this->digitalWrite(low);
+            this->digital_write(low);
             pwm_width_timer.clear();
         }
         break;
