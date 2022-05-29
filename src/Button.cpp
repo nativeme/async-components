@@ -2,8 +2,8 @@
 namespace async{
 
     Button::Button(const VPin& vpin,
-           const String& name = "",
-           std::vector<std::function<void(void)>>&& standard_behavior = {})
+           const String& name,
+           std::vector<std::function<void(void)>>&& standard_behavior)
     :   Named(name),
         Behavable(),
         vpin(std::make_unique<VPin>(vpin))
@@ -26,8 +26,8 @@ namespace async{
     };
 
     Button::Button(const uint8_t pin, 
-           const String& name = "", 
-           std::vector<std::function<void(void)>>&& standard_behavior = {})
+           const String& name, 
+           std::vector<std::function<void(void)>>&& standard_behavior)
     :   Named(name),
         Behavable(),   
         vpin(new VPin(pin))
@@ -65,6 +65,15 @@ namespace async{
         this->event_timer.add_event(press_duration, std::move(on_hold_event));
     }
 
+    void Button::set_multiclick_interspace(const uint8_t& multiclick_interspace){
+        this->multiclick_interspace = multiclick_interspace;
+    }
+
+    void Button::set_on_multiclicks(const uint8_t& click_target, 
+                            const std::function<void(void)>& event){
+        multiclick_events.push_back(MultiClickEvent(click_target, event));
+    }
+
     uint32_t Button::get_current_press_duration() const {
         return event_timer.get_time_passed();
     }
@@ -76,16 +85,34 @@ namespace async{
     void Button::loop(){
         switch (state){
         case Button::idle:
+            for (auto &&event : multiclick_events){
+                if(!event.done && 
+                    event.click_target == this->multiclick_count + 1 && 
+                    multiclick_timer.get_time_passed() > multiclick_interspace){
+                        event.event();
+                        event.done = true;
+                    }
+            }
+
             saved_bounce_logic_state = vpin->digital_read();
             if(saved_bounce_logic_state){
                 debounce_timer.start();
                 state = Button::pre_bounce_testing;
             }
+
             break;
         case Button::pre_bounce_testing:
             if(debounce_timer.have_passed(20)){
                 if(vpin->digital_read() == saved_bounce_logic_state){
                     event_timer.start();
+                    if(multiclick_timer.get_time_passed() <= multiclick_interspace)
+                        multiclick_count++;
+                    else {
+                        multiclick_count = 0;
+                        for (auto &&event : this->multiclick_events){
+                            event.done = false;
+                        }
+                    }
                     this->behaviors[active_behavior_id].event_set[on_press]();
                     state = Button::pressed;
                 } else
@@ -104,6 +131,8 @@ namespace async{
                 if(vpin->digital_read() == !saved_bounce_logic_state){
                     last_press_time = event_timer.get_time_passed();
                     event_timer.clear();
+                    multiclick_timer.start();
+                    
                     this->behaviors[active_behavior_id].event_set[on_release]();
                     state = Button::idle;
                 } else 

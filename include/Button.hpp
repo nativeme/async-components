@@ -36,6 +36,8 @@ protected:
     uint8_t state = 0;
     bool saved_bounce_logic_state = 0;
     uint32_t last_press_time = 0;
+    uint8_t multiclick_interspace = 170;
+    uint8_t multiclick_count = 0;
 
     enum State {
         idle = 0,
@@ -51,8 +53,34 @@ protected:
         on_hold_after_set = 3
     };
 
+    struct MultiClickEvent{
+        uint8_t click_target = 2;
+        std::function<void(void)> event;
+        bool done;
+        MultiClickEvent(uint8_t click_target = 2,
+                        std::function<void(void)> event = [](){})
+        :   click_target(click_target),
+            event(event),
+            done(false)
+        {}
+    };
+
+    struct LongPressEvent{
+        const uint32_t execute_at;
+        const std::function<void(void)> event;
+        bool done;
+        LongPressEvent(const uint32_t& execute_at, const std::function<void(void)>&& event)
+        :   execute_at(execute_at),
+            event(event),
+            done(false)
+        {};
+    };
+    
+    std::vector<MultiClickEvent> multiclick_events;
+
 public:
     async::Timer debounce_timer   = async::Timer(UINT32_MAX / 2);
+    async::Timer multiclick_timer = async::Timer(UINT32_MAX / 2);
     async::EventTimer event_timer = async::EventTimer(UINT32_MAX / 2);
 
     /**
@@ -65,13 +93,25 @@ public:
     Button(const VPin& vpin,
            const String& name = "",
            std::vector<std::function<void(void)>>&& standard_behavior = {});
+    
+    // Button(const VPin& vpin,
+    //        const Params&& builder);
 
+    /**
+     * @brief Create Button based on physical pin represented as integer number.
+     * @param pin Pin number.
+     * @param name String name for button. (optional - defaults to "")
+     * @param standard_behavior Set of lambda functions that represent
+     * on_press, on_hold and on_release. (optional - defaults to {})
+     */
     Button(const uint8_t pin, 
            const String& name = "", 
            std::vector<std::function<void(void)>>&& standard_behavior = {});
+    
+    // Button(const uint8_t pin,
+    //        const Params&& builder);
 
     virtual ~Button();
-
     /**
      * @brief Sets event that will be triggered at the
      * press moment. Affects current behavior.
@@ -98,6 +138,19 @@ public:
      * @param on_hold_event event function lambda.
      */
     void set_on_hold_after(const uint32_t press_duration, std::function<void(void)>&& on_hold_event);
+    /**
+     * @brief Sets maximum interspace between
+     * multiclick is registered. (This value defaults to 170 ms.)
+     * @param multiclick_interspace 
+     */
+    void set_multiclick_interspace(const uint8_t& multiclick_interspace);
+    /**
+     * @brief Sets new multiclick event.
+     * @param click_target Event will be triggered after this amount of clicks.
+     * @param event event function lambda.
+     */
+    void set_on_multiclicks(const uint8_t& click_target, const std::function<void(void)>& event);
+
     /**
      * @brief Gets current press duration time.
      * Useful with "set_on_hold()" method. 
