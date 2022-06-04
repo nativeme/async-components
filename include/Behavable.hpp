@@ -6,28 +6,39 @@
 class Behavable
 {
 private:
-protected:
+// protected:
+public:
     class Behavior{
-    private:
     public:
-        std::vector<std::function<void()>> event_set;
+        std::vector<std::function<void()>*> event_set;
         String behavior_name;
+        uint8_t id;
         
-        Behavior(std::vector<std::function<void()>>&& event_set = {},
-                 const String& behavior_name = "")
+        Behavior(const std::vector<std::function<void()>*>& event_set = {},
+                 const String& behavior_name = "",
+                 uint8_t id = 0)
         :   event_set(event_set),
-            behavior_name(behavior_name)
+            behavior_name(behavior_name),
+            id(id)
         {};
-        virtual ~Behavior(){};
+        virtual ~Behavior(){
+            Serial.println("Behavior destroyed");
+            for (auto &&event : event_set){
+                delete event;
+            }
+        };
     };
 
     uint8_t active_behavior_id;
-    std::vector<Behavior> behaviors;
+    std::vector<Behavior*> behaviors;
 public:
     Behavable()
     :   active_behavior_id(0)
     {};
-    ~Behavable(){
+    virtual ~Behavable(){
+        for (auto &&behavior : behaviors){
+            delete behavior;
+        }     
     };
 
     void activate_behavior(uint8_t behavior_id){
@@ -42,9 +53,9 @@ public:
     //         // active_behavior_id = (*found).
     // }
 
-    uint8_t new_behavior(std::vector<std::function<void(void)>>&& event_set, 
+    uint8_t new_behavior(std::vector<std::function<void(void)>*>& event_set, 
                          const String& name = ""){
-        behaviors.push_back(Behavior(std::move(event_set), name));
+        behaviors.push_back(new Behavior(event_set, name, behaviors.size() + 1));
         return behaviors.size() - 1;
     }
 
@@ -53,7 +64,7 @@ public:
     };
 
     String& get_behavior_name(){
-        return this->behaviors[active_behavior_id].behavior_name;
+        return this->behaviors[active_behavior_id]->behavior_name;
     };
 
     uint8_t next_behavior(){

@@ -26,10 +26,9 @@
 
 namespace async{
 class Button
-:   public 
-    Named,
-    Behavable,
-    ILoopable
+:   public Named,
+    public Behavable,
+    public ILoopable
 {
 protected:
     const std::unique_ptr<VPin> vpin;
@@ -54,11 +53,10 @@ protected:
     };
 
     struct MultiClickEvent{
-        uint8_t click_target = 2;
-        std::function<void(void)> event;
+        uint8_t click_target;
+        std::function<void(void)>* event;
         bool done;
-        MultiClickEvent(uint8_t click_target = 2,
-                        std::function<void(void)> event = [](){})
+        MultiClickEvent(uint8_t click_target, std::function<void(void)>* event)
         :   click_target(click_target),
             event(event),
             done(false)
@@ -66,10 +64,10 @@ protected:
     };
 
     struct LongPressEvent{
-        const uint32_t execute_at;
-        const std::function<void(void)> event;
+        uint32_t execute_at;
+        std::function<void(void)>* event;
         bool done;
-        LongPressEvent(const uint32_t& execute_at, const std::function<void(void)>&& event)
+        LongPressEvent(uint32_t execute_at, std::function<void(void)>* event)
         :   execute_at(execute_at),
             event(event),
             done(false)
@@ -77,11 +75,12 @@ protected:
     };
     
     std::vector<MultiClickEvent> multiclick_events;
+    std::vector<LongPressEvent>  longpress_events;
 
 public:
     async::Timer debounce_timer   = async::Timer(UINT32_MAX / 2);
     async::Timer multiclick_timer = async::Timer(UINT32_MAX / 2);
-    async::EventTimer event_timer = async::EventTimer(UINT32_MAX / 2);
+    async::Timer longpress_timer = async::EventTimer(UINT32_MAX / 2);
 
     /**
      * @brief Create Button based on existing VPin.
@@ -92,7 +91,7 @@ public:
      */
     Button(const VPin& vpin,
            const String& name = "",
-           std::vector<std::function<void(void)>>&& standard_behavior = {});
+           std::vector<std::function<void(void)>*>&& standard_behavior = {});
     
     // Button(const VPin& vpin,
     //        const Params&& builder);
@@ -117,19 +116,19 @@ public:
      * press moment. Affects current behavior.
      * @param on_press_event lambda function.
      */
-    void set_on_press(const std::function<void(void)>&& on_press_event);
+    void set_on_press(std::function<void(void)>& on_press_event);
     /**
      * @brief Sets event that will be triggered at the
      * release moment. Affects current behavior.
      * @param on_release_event lambda function.
      */
-    void set_on_release(const std::function<void(void)>&& on_release_event);
+    void set_on_release(std::function<void(void)>&& on_release_event);
     /**
      * @brief Sets codeblock that will be executed in async loop when button
      * will be held. Affects current behavior.
      * @param on_hold_codeblock lambda function.
      */
-    void set_on_hold_loop(std::function<void(void)>&& on_hold_codeblock);
+    void set_on_hold_loop(std::function<void(void)>& on_hold_codeblock);
     /**
      * @brief At the moment, it works regardless of the chosen behavior.
      * Sets event after certain timespan of holding button.
@@ -137,20 +136,20 @@ public:
      * @param press_duration timespan after with event will be triggered.
      * @param on_hold_event event function lambda.
      */
-    void set_on_hold_after(const uint32_t press_duration, std::function<void(void)>&& on_hold_event);
+    void set_on_hold_after(const uint32_t& press_duration, std::function<void(void)>&& on_hold_event);
+    /**
+     * @brief Sets new multiclick event.
+     * @param click_target Event will be triggered after this amount of clicks.
+     * @param event event function lambda.
+     */
+    void set_on_multiclicks(const uint8_t& click_target, std::function<void(void)>&& multiclick_event);
     /**
      * @brief Sets maximum interspace between
      * multiclick is registered. (This value defaults to 170 ms.)
      * @param multiclick_interspace 
      */
     void set_multiclick_interspace(const uint8_t& multiclick_interspace);
-    /**
-     * @brief Sets new multiclick event.
-     * @param click_target Event will be triggered after this amount of clicks.
-     * @param event event function lambda.
-     */
-    void set_on_multiclicks(const uint8_t& click_target, const std::function<void(void)>& event);
-
+  
     /**
      * @brief Gets current press duration time.
      * Useful with "set_on_hold()" method. 
