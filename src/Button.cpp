@@ -2,79 +2,61 @@
 namespace async{
 
     Button::Button(const VPin& vpin,
-           const String& name,
-           std::vector<std::function<void(void)>*>&& standard_behavior)
+                   const String& name,
+                   Params&& builder)
     :   Named(name),
-        Behavable(),
+        Behavable(3),
         vpin(std::make_unique<VPin>(vpin))
     {   
+        builder.builder();
         this->vpin->pin_mode(INPUT_PULLUP);
-        /*
-            If there are less functions than required to create behavior for this item,
-            fill lacking functions with dummy lambdas.
-        */
-        if(standard_behavior.size() < 3){
-            uint8_t original_size = standard_behavior.size();
-            standard_behavior.resize(3);
-            for (size_t i = original_size; i < 3; i++){
-                standard_behavior[i] = new std::function<void(void)>([](){});
-            }
-        }
-
-        this->new_behavior(standard_behavior);
         Runtime::loopables.push_back(this);
     };
 
-    // Button::Button(const uint8_t pin, 
-    //        const String& name, 
-    //        std::vector<std::function<void(void)>>&& standard_behavior)
-    // :   Named(name),
-    //     Behavable(),   
-    //     vpin(new VPin(pin))
-    // {
-    //     this->vpin->pin_mode(INPUT_PULLUP);
- 
-    //     if(standard_behavior.size() < 3){
-    //         uint8_t original_size = standard_behavior.size();
-    //         standard_behavior.resize(3);
-    //         for (size_t i = original_size; i < 3; i++){
-    //             standard_behavior[i] = [](){};
-    //         }
-    //     }
-
-    //     this->new_behavior(std::move(standard_behavior));
-    //     Runtime::loopables.push_back(this);
-    // };
+    Button::Button(const uint8_t pin, 
+                   const String& name,
+                   const Params&& builder)
+    :   Named(name),
+        Behavable(3),   
+        vpin(new VPin(pin))
+    {
+        builder.builder();
+        this->vpin->pin_mode(INPUT_PULLUP);
+        Runtime::loopables.push_back(this);
+    };
 
     Button::~Button(){
     };
 
-    void Button::set_on_press(std::function<void(void)>& on_press_event){
-        this->behaviors[active_behavior_id]->event_set[on_press] = &on_press_event;
+    void Button::set_on_press(std::function<void(void)>&& on_press_event){
+        auto ev = new SingleEvent(std::move(on_press_event));
+        this->get_active_behavior().events_vec[on_press] = ev;
     }
 
     void Button::set_on_release(std::function<void(void)>&& on_release_event){
-        this->behaviors[active_behavior_id]->event_set[on_release] = new std::function<void(void)>(on_release_event);
+        auto ev = new SingleEvent(std::move(on_release_event));
+        this->get_active_behavior().events_vec[on_release] = ev;
     }
 
-    void Button::set_on_hold_loop(std::function<void(void)>& on_hold_codeblock){
-        this->behaviors[active_behavior_id]->event_set[on_hold] = &on_hold_codeblock;
+    void Button::set_on_hold_loop(std::function<void(void)>&& on_hold_event){
+        auto ev = new SingleEvent(std::move(on_hold_event));
+        this->get_active_behavior().events_vec[on_hold] = ev;
     }
 
-    void Button::set_on_hold_after(const uint32_t& press_duration, std::function<void(void)>&& on_hold_event){
-        this->behaviors[active_behavior_id]->event_set.push_back(new std::function<void(void)>(on_hold_event));
-        longpress_events.push_back(LongPressEvent(
-            press_duration,
-            this->behaviors[active_behavior_id]->event_set.back()
-        ));
-    }
+    void Button::set_on_hold_after(const uint32_t& press_duration, std::function<void(void)>&& longpress_event){
+        auto ev = new LongPressEvent(this,
+                                     this->get_active_behavior().get_id(),
+                                     press_duration, 
+                                     std::move(longpress_event));
+        longpress_events.push_back(ev);
+    };
 
     void Button::set_on_multiclicks(const uint8_t& click_target, std::function<void(void)>&& multiclick_event){
-        this->behaviors[active_behavior_id]->event_set.push_back(new std::function<void(void)>(multiclick_event));
-        multiclick_events.push_back(MultiClickEvent(
-            click_target, 
-            this->behaviors[active_behavior_id]->event_set.back()
-        ));
+        auto ev = new MultiClickEvent(this,
+                                      this->get_active_behavior().get_id(),
+                                      click_target, 
+                                      std::move(multiclick_event));
+        multiclick_events.push_back(ev);
     }
 
     void Button::set_multiclick_interspace(const uint8_t& multiclick_interspace){
@@ -93,11 +75,11 @@ namespace async{
         switch (state){
         case Button::idle:
             for (auto &&event : multiclick_events){
-                if(!event.done && 
-                    event.click_target == this->multiclick_count + 1 && 
+                if(!event->done && 
+                    event->click_target == this->multiclick_count + 1 && 
                     multiclick_timer.get_time_passed() > multiclick_interspace){
-                        event.event->operator()();
-                        event.done = true;
+                        event->execute();
+                        event->done = true;
                     }
             }
 
@@ -109,18 +91,21 @@ namespace async{
 
             break;
         case Button::pre_bounce_testing:
-            if(debounce_timer.have_passed(20)){
+            if(debounce_timer.have_passed(30)){
                 if(vpin->digital_read() == saved_bounce_logic_state){
                     longpress_timer.start();
+
                     if(multiclick_timer.get_time_passed() <= multiclick_interspace)
                         multiclick_count++;
                     else {
                         multiclick_count = 0;
                         for (auto &&event : this->multiclick_events){
-                            event.done = false;
+                            event->done = false;
                         }
                     }
-                    this->behaviors[active_behavior_id]->event_set[on_press]->operator()();
+                    
+                    this->get_active_behavior().events_vec[on_press]->execute();
+
                     state = Button::pressed;
                 } else
                     state = Button::idle;
@@ -131,12 +116,12 @@ namespace async{
                 state = Button::post_bounce_testing;
                 debounce_timer.start();
             } else {
-                this->behaviors[active_behavior_id]->event_set[on_hold]->operator()();
-                
+                this->get_active_behavior().events_vec[on_hold]->execute();
+
                 for (auto &&event : this->longpress_events){
-                    if(!event.done && longpress_timer.have_passed(event.execute_at)){
-                        event.event->operator()();
-                        event.done = true;
+                    if(!event->done && longpress_timer.have_passed(event->execute_at)){
+                        event->execute();
+                        event->done = true;
                     }
                 }
             }
@@ -148,13 +133,14 @@ namespace async{
                     last_press_time = longpress_timer.get_time_passed();
 
                     for (auto &&event : this->longpress_events){
-                        event.done = false;
+                        event->done = false;
                     }
                     
                     longpress_timer.clear();
                     multiclick_timer.start();
                     
-                    this->behaviors[active_behavior_id]->event_set[on_release]->operator()();
+                    this->get_active_behavior().events_vec[on_release]->execute();
+
                     state = Button::idle;
                 } else 
                     state = Button::pressed;

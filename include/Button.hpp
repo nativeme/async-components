@@ -23,6 +23,7 @@
 
 #include "Named.hpp"
 #include "Behavable.hpp"
+#include "EventTypes.hpp"
 
 namespace async{
 class Button
@@ -48,40 +49,68 @@ protected:
     enum Events {
         on_press = 0,
         on_release = 1,
-        on_hold = 2,
-        on_hold_after_set = 3
+        on_hold = 2
     };
 
-    struct MultiClickEvent{
+    struct MultiClickEvent
+    :   public IEvent
+    {
+        Button* this_button;
+        const uint8_t bound_id;
         uint8_t click_target;
-        std::function<void(void)>* event;
+        std::function<void(void)> event_function;
         bool done;
-        MultiClickEvent(uint8_t click_target, std::function<void(void)>* event)
-        :   click_target(click_target),
-            event(event),
+        MultiClickEvent(Button* this_button, 
+                        const uint8_t& bound_id,
+                        const uint8_t& click_target,
+                        std::function<void(void)>&& event)
+        :   IEvent(),
+            this_button(this_button),
+            bound_id(bound_id),
+            click_target(click_target),
+            event_function(event),
             done(false)
         {}
+
+        virtual void execute() override {
+            if(this_button->get_active_behavior().get_id() == bound_id)
+                this->event_function.operator()();
+        }
     };
 
-    struct LongPressEvent{
+    struct LongPressEvent
+    :   public IEvent
+    {
+        Button* this_button;
+        const uint8_t bound_id;
         uint32_t execute_at;
-        std::function<void(void)>* event;
+        std::function<void(void)> event_function;
         bool done;
-        LongPressEvent(uint32_t execute_at, std::function<void(void)>* event)
-        :   execute_at(execute_at),
-            event(event),
+        LongPressEvent(Button* this_button, 
+                       const uint8_t& bound_id,
+                       const uint32_t& execute_at, 
+                       std::function<void(void)>&& event)
+        :   IEvent(),
+            this_button(this_button),
+            bound_id(bound_id),
+            execute_at(execute_at),
+            event_function(event),
             done(false)
         {};
+
+        virtual void execute() override {
+            if(this_button->get_active_behavior().get_id() == bound_id)
+                this->event_function.operator()();
+        }
     };
     
-    std::vector<MultiClickEvent> multiclick_events;
-    std::vector<LongPressEvent>  longpress_events;
+    std::vector<MultiClickEvent*> multiclick_events;
+    std::vector<LongPressEvent*>  longpress_events;
 
-public:
     async::Timer debounce_timer   = async::Timer(UINT32_MAX / 2);
     async::Timer multiclick_timer = async::Timer(UINT32_MAX / 2);
     async::Timer longpress_timer = async::EventTimer(UINT32_MAX / 2);
-
+public:
     /**
      * @brief Create Button based on existing VPin.
      * @param vpin Existing VitualPin entity.
@@ -91,10 +120,7 @@ public:
      */
     Button(const VPin& vpin,
            const String& name = "",
-           std::vector<std::function<void(void)>*>&& standard_behavior = {});
-    
-    // Button(const VPin& vpin,
-    //        const Params&& builder);
+           Params&& builder = [](){});
 
     /**
      * @brief Create Button based on physical pin represented as integer number.
@@ -105,30 +131,31 @@ public:
      */
     Button(const uint8_t pin, 
            const String& name = "", 
-           std::vector<std::function<void(void)>>&& standard_behavior = {});
-    
-    // Button(const uint8_t pin,
-    //        const Params&& builder);
+           const Params&& builder = [](){});
 
     virtual ~Button();
+
     /**
      * @brief Sets event that will be triggered at the
      * press moment. Affects current behavior.
      * @param on_press_event lambda function.
      */
-    void set_on_press(std::function<void(void)>& on_press_event);
+    void set_on_press(std::function<void(void)>&& on_press_event);
+
     /**
      * @brief Sets event that will be triggered at the
      * release moment. Affects current behavior.
      * @param on_release_event lambda function.
      */
     void set_on_release(std::function<void(void)>&& on_release_event);
+
     /**
      * @brief Sets codeblock that will be executed in async loop when button
      * will be held. Affects current behavior.
      * @param on_hold_codeblock lambda function.
      */
-    void set_on_hold_loop(std::function<void(void)>& on_hold_codeblock);
+    void set_on_hold_loop(std::function<void(void)>&& on_hold_codeblock);
+
     /**
      * @brief At the moment, it works regardless of the chosen behavior.
      * Sets event after certain timespan of holding button.
@@ -137,12 +164,14 @@ public:
      * @param on_hold_event event function lambda.
      */
     void set_on_hold_after(const uint32_t& press_duration, std::function<void(void)>&& on_hold_event);
+
     /**
      * @brief Sets new multiclick event.
      * @param click_target Event will be triggered after this amount of clicks.
      * @param event event function lambda.
      */
     void set_on_multiclicks(const uint8_t& click_target, std::function<void(void)>&& multiclick_event);
+    
     /**
      * @brief Sets maximum interspace between
      * multiclick is registered. (This value defaults to 170 ms.)
@@ -156,12 +185,18 @@ public:
      * @return uint32_t 
      */
     uint32_t get_current_press_duration() const;
+
     /**
      * @brief Gets last press duration time.
      * Useful with "on_release()" method. 
      * @return const uint32_t& 
      */
     const uint32_t& get_last_press_time();
+
+    /**
+     * @brief 
+     * Loopable object interface implementation.
+     */
     virtual void loop() override;
 };
 }

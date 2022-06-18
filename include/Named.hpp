@@ -18,7 +18,7 @@ public:
         return name;
     }
 
-    void set_name(String name){
+    void set_name(const String& name){
         this->name = name;
     }
 };
