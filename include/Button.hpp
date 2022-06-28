@@ -69,7 +69,7 @@ protected:
             bound_id(bound_id),
             click_target(click_target),
             event_function(event),
-            done(false)
+            done(true)
         {}
 
         virtual void execute() override {
